@@ -50,7 +50,9 @@ public class GetObject
         try {
             S3Object o = s3.getObject(bucket_name, key_name);
             S3ObjectInputStream s3is = o.getObjectContent();
-            FileOutputStream fos = new FileOutputStream(new File(key_name));
+            File file = new File(key_name);
+            System.out.println("Write to file: " + file.getAbsolutePath());
+            FileOutputStream fos = new FileOutputStream(file);
             byte[] read_buf = new byte[1024];
             int read_len = 0;
             while ((read_len = s3is.read(read_buf)) > 0) {

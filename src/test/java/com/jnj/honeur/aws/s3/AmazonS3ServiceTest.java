@@ -33,12 +33,15 @@ class AmazonS3ServiceTest {
         s3Service.deleteBucket(TEST_BUCKET);
     }
 
-    private File createTmpFile(String fileName, String fileContent) throws IOException {
-        File tmpFile = File.createTempFile(fileName, ".tmp");
-        FileWriter writer = new FileWriter(tmpFile);
-        writer.write(fileContent);
-        writer.close();
-        return tmpFile;
+    @Test
+    void createTempFile() throws IOException {
+        File tmpFile = s3Service.createTempFile("S2.png");
+        assertTrue(tmpFile.getName().contains("S2_"));
+        assertTrue(tmpFile.getName().endsWith(".png"));
+
+        tmpFile = s3Service.createTempFile("S22.png");
+        assertTrue(tmpFile.getName().contains("S22"));
+        assertTrue(tmpFile.getName().endsWith(".png"));
     }
 
     @Test
@@ -54,19 +57,19 @@ class AmazonS3ServiceTest {
         assertNull(bucket);
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void getAllBuckets() {
         List<Bucket> buckets = s3Service.getAllBuckets();
         assertNotNull(buckets);
         assertTrue(buckets.size() >= 1);
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void logAllBuckets() {
         s3Service.logAllBuckets();
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void createBucket() {
         Bucket bucket = s3Service.createBucket(uuid.toString(), REGION);
         assertNotNull(bucket);
@@ -74,7 +77,7 @@ class AmazonS3ServiceTest {
         s3Service.deleteBucket(uuid.toString());
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void deleteBucket() {
         Bucket bucket = s3Service.createBucket(uuid.toString(), REGION);
         assertNotNull(bucket);
@@ -83,7 +86,7 @@ class AmazonS3ServiceTest {
         assertNull(deletedBucket);
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void putGetObject() throws IOException {
         File tmpFile = createTmpFile("test", "test");
         s3Service.putObject(TEST_BUCKET, tmpFile);
@@ -92,7 +95,7 @@ class AmazonS3ServiceTest {
         assertEquals(tmpFile.getName(), object.getKey());
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void putCopyGetObject() throws IOException {
         // Prepare
         File tmpFile = createTmpFile("test", "test");
@@ -110,7 +113,7 @@ class AmazonS3ServiceTest {
         s3Service.deleteBucket(uuid.toString());
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void getObjects() throws IOException {
         // Prepare
         File tmpFile = createTmpFile("test", "test");
@@ -131,7 +134,7 @@ class AmazonS3ServiceTest {
         assertTrue(found);
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void deleteObject() throws IOException {
         // Create test data
         File tmpFile = createTmpFile("test", "test");
@@ -149,7 +152,7 @@ class AmazonS3ServiceTest {
         }
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void deleteObjects() throws IOException {
         // Create test data
         File tmpFile1 = createTmpFile("test1", "test");
@@ -164,5 +167,13 @@ class AmazonS3ServiceTest {
         // Check successful delete
         result = s3Service.getObjects(TEST_BUCKET);
         assertTrue(result.getObjectSummaries().isEmpty());
+    }
+
+    private File createTmpFile(String fileName, String fileContent) throws IOException {
+        File tmpFile = File.createTempFile(fileName, ".tmp");
+        FileWriter writer = new FileWriter(tmpFile);
+        writer.write(fileContent);
+        writer.close();
+        return tmpFile;
     }
 }

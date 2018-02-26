@@ -3,15 +3,22 @@ package com.jnj.honeur.aws.s3;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.*;
+import com.amazonaws.services.s3.transfer.Download;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
+import com.amazonaws.services.s3.transfer.Upload;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Iterator;
 import java.util.List;
 
@@ -20,13 +27,16 @@ public class AmazonS3Service {
     private static final Logger LOGGER = LoggerFactory.getLogger(AmazonS3Service.class);
 
     private AmazonS3 s3;
+    private TransferManager transferManager;
 
     public AmazonS3Service(final AmazonS3 s3) {
         this.s3 = s3;
+        transferManager = TransferManagerBuilder.standard().withS3Client(s3).build();
     }
 
     public AmazonS3Service(final BasicAWSCredentials credentials) {
-        s3 = AmazonS3ClientBuilder.standard().withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
+        s3 = AmazonS3ClientBuilder.standard().withForceGlobalBucketAccessEnabled(true).withRegion(Regions.EU_WEST_1).withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
+        transferManager = TransferManagerBuilder.standard().withS3Client(s3).build();
     }
 
     public Bucket getBucket(String bucketName) {
@@ -108,21 +118,30 @@ public class AmazonS3Service {
     public File getObjectFile(String bucketName, String keyName) throws AmazonServiceException, IOException {
         LOGGER.debug("Downloading %s from S3 bucket %s...\n", keyName, bucketName);
         S3Object s3Object = s3.getObject(bucketName, keyName);
-        File file = new File(keyName);
-        writeFile(s3Object, file);
+        File file = createTempFile(keyName);
+        Files.copy(s3Object.getObjectContent(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
         return file;
     }
 
-    private void writeFile(S3Object s3Object, File file) throws IOException {
-        S3ObjectInputStream s3is = s3Object.getObjectContent();
-        FileOutputStream fos = new FileOutputStream(file);
-        byte[] read_buf = new byte[1024];
-        int read_len = 0;
-        while ((read_len = s3is.read(read_buf)) > 0) {
-            fos.write(read_buf, 0, read_len);
-        }
-        s3is.close();
-        fos.close();
+    public void downloadFile(String bucketName, String keyName, File targetFile) throws AmazonServiceException, InterruptedException {
+        LOGGER.debug("Downloading to file: " + targetFile.getAbsolutePath());
+
+        Download download = transferManager.download(bucketName, keyName, targetFile);
+        download.waitForCompletion();
+    }
+
+    public void uploadFile(String bucketName, String keyName, File file) throws AmazonServiceException, InterruptedException {
+        LOGGER.debug("Uploading file: " + file.getAbsolutePath());
+
+        Upload upload = transferManager.upload(bucketName, keyName, file);
+        upload.waitForCompletion();
+    }
+
+    public File createTempFile(String objectKey) throws IOException {
+        String prefix = com.google.common.io.Files.getNameWithoutExtension(objectKey);
+        prefix = StringUtils.rightPad(prefix, 3, '_');
+        String suffix = "." + com.google.common.io.Files.getFileExtension(objectKey);
+        return File.createTempFile(prefix, suffix);
     }
 
     public void putObject(String bucketName, File file) throws AmazonServiceException {

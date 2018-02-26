@@ -240,7 +240,7 @@ public class XferMgrProgress
 
         // check to see if local path is a directory or file...
         File f = new File(args[cur_arg]);
-        if (f.exists() == false) {
+        if (!f.exists()) {
             System.out.println("Input path doesn't exist: " + args[cur_arg]);
             System.exit(1);
         }
