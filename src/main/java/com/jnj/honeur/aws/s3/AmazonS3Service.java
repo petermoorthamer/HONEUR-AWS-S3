@@ -26,8 +26,14 @@ public class AmazonS3Service {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AmazonS3Service.class);
 
+    private static final String DEFAULT_REGION = Regions.EU_WEST_1.getName();
+
     private AmazonS3 s3;
     private TransferManager transferManager;
+
+    public AmazonS3Service() {
+        this(AmazonS3ClientBuilder.defaultClient());
+    }
 
     public AmazonS3Service(final AmazonS3 s3) {
         this.s3 = s3;
@@ -62,6 +68,14 @@ public class AmazonS3Service {
         }
     }
 
+    public boolean doesBucketExist(String bucketName) {
+        return s3.doesBucketExistV2(bucketName);
+    }
+
+    public Bucket createBucket(String bucketName) throws AmazonS3Exception {
+        return createBucket(bucketName, DEFAULT_REGION);
+    }
+
     public Bucket createBucket(String bucketName, String region) throws AmazonS3Exception {
         if (s3.doesBucketExistV2(bucketName)) {
             LOGGER.info("Bucket %s already exists.\n", bucketName);
@@ -87,7 +101,6 @@ public class AmazonS3Service {
                 break;
             }
         }
-        ;
 
         LOGGER.debug(" - removing versions from bucket");
         VersionListing versionListing = s3.listVersions(new ListVersionsRequest().withBucketName(bucketName));
@@ -110,17 +123,20 @@ public class AmazonS3Service {
         LOGGER.debug("Bucket deleted!");
     }
 
-    public S3Object getObject(String bucketName, String keyName) throws AmazonServiceException, IOException {
+    public S3Object getObject(String bucketName, String keyName) throws AmazonServiceException {
         LOGGER.debug("Downloading %s from S3 bucket %s...\n", keyName, bucketName);
         return s3.getObject(bucketName, keyName);
     }
 
     public File getObjectFile(String bucketName, String keyName) throws AmazonServiceException, IOException {
+        return getObjectFile(bucketName, keyName, createTempFile(keyName));
+    }
+
+    public File getObjectFile(String bucketName, String keyName, File targetFile) throws AmazonServiceException, IOException {
         LOGGER.debug("Downloading %s from S3 bucket %s...\n", keyName, bucketName);
         S3Object s3Object = s3.getObject(bucketName, keyName);
-        File file = createTempFile(keyName);
-        Files.copy(s3Object.getObjectContent(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        return file;
+        Files.copy(s3Object.getObjectContent(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        return targetFile;
     }
 
     public void downloadFile(String bucketName, String keyName, File targetFile) throws AmazonServiceException, InterruptedException {
@@ -145,8 +161,11 @@ public class AmazonS3Service {
     }
 
     public void putObject(String bucketName, File file) throws AmazonServiceException {
+        putObject(bucketName, file.getName(), file);
+    }
+
+    public void putObject(String bucketName, String keyName, File file) throws AmazonServiceException {
         String filePath = file.getAbsolutePath();
-        String keyName = file.getName();
         LOGGER.debug("Uploading %s to S3 bucket %s...\n", filePath, bucketName);
         s3.putObject(bucketName, keyName, filePath);
     }
@@ -157,6 +176,10 @@ public class AmazonS3Service {
 
     public ListObjectsV2Result getObjects(String bucketName) {
         return s3.listObjectsV2(bucketName);
+    }
+
+    public ListObjectsV2Result getObjects(String bucketName, String prefix) {
+        return s3.listObjectsV2(bucketName, prefix);
     }
 
     public void logObjects(String bucketName) {
