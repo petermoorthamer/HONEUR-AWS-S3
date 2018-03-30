@@ -1,8 +1,7 @@
 package com.jnj.honeur.aws.s3;
 
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
@@ -11,6 +10,7 @@ import com.amazonaws.services.s3.transfer.Download;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
+import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +28,7 @@ public class AmazonS3Service {
 
     private static final String DEFAULT_REGION = Regions.EU_WEST_1.getName();
 
+    private AWSSecurityTokenService tokenService;
     private AmazonS3 s3;
     private TransferManager transferManager;
 
@@ -37,17 +38,37 @@ public class AmazonS3Service {
 
     public AmazonS3Service(final AmazonS3 s3) {
         this.s3 = s3;
-        transferManager = TransferManagerBuilder.standard().withS3Client(s3).build();
+        this.transferManager = TransferManagerBuilder.standard().withS3Client(s3).build();
     }
 
-    public AmazonS3Service(final BasicAWSCredentials credentials) {
-        s3 = AmazonS3ClientBuilder.standard().withForceGlobalBucketAccessEnabled(true).withRegion(Regions.EU_WEST_1).withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
-        transferManager = TransferManagerBuilder.standard().withS3Client(s3).build();
+    public AmazonS3Service(final AWSCredentials credentials) {
+        this.s3 = HoneurAmazonS3ClientBuilder.standardClient(credentials);
+        this.transferManager = TransferManagerBuilder.standard().withS3Client(s3).build();
+    }
+
+    public AmazonS3Service(final AWSSecurityTokenService tokenService) {
+        this.tokenService = tokenService;
+    }
+
+    private AmazonS3 getS3() {
+        if(this.s3 != null) {
+            return this.s3;
+        } else {
+            return HoneurAmazonS3ClientBuilder.sessionClient(tokenService);
+        }
+    }
+
+    private TransferManager getTransferManager(final AmazonS3 s3) {
+        if(this.s3 == s3) {
+            return transferManager;
+        } else {
+            return TransferManagerBuilder.standard().withS3Client(s3).build();
+        }
     }
 
     public Bucket getBucket(String bucketName) {
         Bucket namedBucket = null;
-        List<Bucket> buckets = s3.listBuckets();
+        List<Bucket> buckets = getS3().listBuckets();
         for (Bucket b : buckets) {
             if (b.getName().equals(bucketName)) {
                 namedBucket = b;
@@ -57,11 +78,11 @@ public class AmazonS3Service {
     }
 
     public List<Bucket> getAllBuckets() {
-        return s3.listBuckets();
+        return getS3().listBuckets();
     }
 
     public void logAllBuckets() {
-        final List<Bucket> buckets = s3.listBuckets();
+        final List<Bucket> buckets = getS3().listBuckets();
         LOGGER.info("Your Amazon S3 buckets are:");
         for (Bucket b : buckets) {
             LOGGER.info("* " + b.getName());
@@ -69,7 +90,7 @@ public class AmazonS3Service {
     }
 
     public boolean doesBucketExist(String bucketName) {
-        return s3.doesBucketExistV2(bucketName);
+        return getS3().doesBucketExistV2(bucketName);
     }
 
     public Bucket createBucket(String bucketName) throws AmazonS3Exception {
@@ -77,55 +98,55 @@ public class AmazonS3Service {
     }
 
     public Bucket createBucket(String bucketName, String region) throws AmazonS3Exception {
-        if (s3.doesBucketExistV2(bucketName)) {
+        if (getS3().doesBucketExistV2(bucketName)) {
             LOGGER.info("Bucket %s already exists.\n", bucketName);
             return getBucket(bucketName);
         } else {
-            return s3.createBucket(new CreateBucketRequest(bucketName, region));
+            return getS3().createBucket(new CreateBucketRequest(bucketName, region));
         }
     }
 
     public void deleteBucket(final String bucketName) throws AmazonServiceException {
         LOGGER.debug("Deleting S3 bucket: " + bucketName);
         LOGGER.debug(" - removing objects from bucket");
-        ObjectListing objectListing = s3.listObjects(bucketName);
+        ObjectListing objectListing = getS3().listObjects(bucketName);
         while (true) {
             for (Iterator<?> iterator = objectListing.getObjectSummaries().iterator(); iterator.hasNext(); ) {
                 S3ObjectSummary summary = (S3ObjectSummary) iterator.next();
-                s3.deleteObject(bucketName, summary.getKey());
+                getS3().deleteObject(bucketName, summary.getKey());
             }
             // more objectListing to retrieve?
             if (objectListing.isTruncated()) {
-                objectListing = s3.listNextBatchOfObjects(objectListing);
+                objectListing = getS3().listNextBatchOfObjects(objectListing);
             } else {
                 break;
             }
         }
 
         LOGGER.debug(" - removing versions from bucket");
-        VersionListing versionListing = s3.listVersions(new ListVersionsRequest().withBucketName(bucketName));
+        VersionListing versionListing = getS3().listVersions(new ListVersionsRequest().withBucketName(bucketName));
         while (true) {
             for (Iterator<?> iterator = versionListing.getVersionSummaries().iterator(); iterator.hasNext(); ) {
                 S3VersionSummary vs = (S3VersionSummary) iterator.next();
-                s3.deleteVersion(bucketName, vs.getKey(), vs.getVersionId());
+                getS3().deleteVersion(bucketName, vs.getKey(), vs.getVersionId());
             }
 
             if (versionListing.isTruncated()) {
-                versionListing = s3.listNextBatchOfVersions(versionListing);
+                versionListing = getS3().listNextBatchOfVersions(versionListing);
             } else {
                 break;
             }
         }
 
         LOGGER.debug(" OK, bucket ready to delete!");
-        s3.deleteBucket(bucketName);
+        getS3().deleteBucket(bucketName);
 
         LOGGER.debug("Bucket deleted!");
     }
 
     public S3Object getObject(String bucketName, String keyName) throws AmazonServiceException {
         LOGGER.debug("Downloading %s from S3 bucket %s...\n", keyName, bucketName);
-        return s3.getObject(bucketName, keyName);
+        return getS3().getObject(bucketName, keyName);
     }
 
     public File getObjectFile(String bucketName, String keyName) throws AmazonServiceException, IOException {
@@ -134,7 +155,7 @@ public class AmazonS3Service {
 
     public File getObjectFile(String bucketName, String keyName, File targetFile) throws AmazonServiceException, IOException {
         LOGGER.debug("Downloading %s from S3 bucket %s...\n", keyName, bucketName);
-        S3Object s3Object = s3.getObject(bucketName, keyName);
+        S3Object s3Object = getS3().getObject(bucketName, keyName);
         Files.copy(s3Object.getObjectContent(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
         return targetFile;
     }
@@ -142,14 +163,14 @@ public class AmazonS3Service {
     public void downloadFile(String bucketName, String keyName, File targetFile) throws AmazonServiceException, InterruptedException {
         LOGGER.debug("Downloading to file: " + targetFile.getAbsolutePath());
 
-        Download download = transferManager.download(bucketName, keyName, targetFile);
+        Download download = getTransferManager(getS3()).download(bucketName, keyName, targetFile);
         download.waitForCompletion();
     }
 
     public void uploadFile(String bucketName, String keyName, File file) throws AmazonServiceException, InterruptedException {
         LOGGER.debug("Uploading file: " + file.getAbsolutePath());
 
-        Upload upload = transferManager.upload(bucketName, keyName, file);
+        Upload upload = getTransferManager(getS3()).upload(bucketName, keyName, file);
         upload.waitForCompletion();
     }
 
@@ -167,11 +188,11 @@ public class AmazonS3Service {
     public void putObject(String bucketName, String keyName, File file) throws AmazonServiceException {
         String filePath = file.getAbsolutePath();
         LOGGER.debug("Uploading %s to S3 bucket %s...\n", filePath, bucketName);
-        s3.putObject(bucketName, keyName, filePath);
+        getS3().putObject(bucketName, keyName, filePath);
     }
 
     public void copyObject(String objectKey, String fromBucket, String toBucket) throws AmazonServiceException {
-        s3.copyObject(fromBucket, objectKey, toBucket, objectKey);
+        getS3().copyObject(fromBucket, objectKey, toBucket, objectKey);
     }
 
     public ListObjectsV2Result getObjects(String bucketName) {
@@ -179,11 +200,11 @@ public class AmazonS3Service {
     }
 
     public ListObjectsV2Result getObjects(String bucketName, String prefix) {
-        return s3.listObjectsV2(bucketName, prefix);
+        return getS3().listObjectsV2(bucketName, prefix);
     }
 
     public void logObjects(String bucketName) {
-        ListObjectsV2Result result = s3.listObjectsV2(bucketName);
+        ListObjectsV2Result result = getS3().listObjectsV2(bucketName);
         List<S3ObjectSummary> objects = result.getObjectSummaries();
         for (S3ObjectSummary os: objects) {
             LOGGER.info("* " + os.getKey());
@@ -191,11 +212,11 @@ public class AmazonS3Service {
     }
 
     public void deleteObject(String bucketName, String objectKey) throws AmazonServiceException {
-        s3.deleteObject(bucketName, objectKey);
+        getS3().deleteObject(bucketName, objectKey);
     }
 
     public void deleteObjects(String bucketName, String... objectKeys) throws AmazonServiceException {
         DeleteObjectsRequest dor = new DeleteObjectsRequest(bucketName).withKeys(objectKeys);
-        s3.deleteObjects(dor);
+        getS3().deleteObjects(dor);
     }
 }
