@@ -2,6 +2,7 @@ package com.jnj.honeur.aws.s3;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSSessionCredentialsProvider;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
@@ -10,7 +11,6 @@ import com.amazonaws.services.s3.transfer.Download;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +28,7 @@ public class AmazonS3Service {
 
     private static final String DEFAULT_REGION = Regions.EU_WEST_1.getName();
 
-    private AWSSecurityTokenService tokenService;
+    private AWSSessionCredentialsProvider sessionCredentialsProvider;
     private AmazonS3 s3;
     private TransferManager transferManager;
 
@@ -46,15 +46,15 @@ public class AmazonS3Service {
         this.transferManager = TransferManagerBuilder.standard().withS3Client(s3).build();
     }
 
-    public AmazonS3Service(final AWSSecurityTokenService tokenService) {
-        this.tokenService = tokenService;
+    public AmazonS3Service(final AWSSessionCredentialsProvider sessionCredentialsProvider) {
+        this.sessionCredentialsProvider = sessionCredentialsProvider;
     }
 
     private AmazonS3 getS3() {
         if(this.s3 != null) {
             return this.s3;
         } else {
-            return HoneurAmazonS3ClientBuilder.sessionClient(tokenService);
+            return HoneurAmazonS3ClientBuilder.sessionClient(sessionCredentialsProvider);
         }
     }
 

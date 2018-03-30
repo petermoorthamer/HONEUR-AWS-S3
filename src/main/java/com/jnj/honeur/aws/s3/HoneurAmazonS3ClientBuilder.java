@@ -1,9 +1,6 @@
 package com.jnj.honeur.aws.s3;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicSessionCredentials;
-import com.amazonaws.auth.STSSessionCredentialsProvider;
+import com.amazonaws.auth.*;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
@@ -44,8 +41,12 @@ public class HoneurAmazonS3ClientBuilder {
     }
 
     public static AmazonS3 sessionClient(final AWSSecurityTokenService tokenService) {
+        return sessionClient(new STSSessionCredentialsProvider(tokenService));
+    }
+
+    public static AmazonS3 sessionClient(final AWSSessionCredentialsProvider credentialsProvider) {
         return AmazonS3ClientBuilder.standard()
-                .withCredentials(new STSSessionCredentialsProvider(tokenService))
+                .withCredentials(credentialsProvider)
                 .build();
     }
 
