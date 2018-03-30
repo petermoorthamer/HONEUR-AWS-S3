@@ -196,7 +196,7 @@ public class AmazonS3Service {
     }
 
     public ListObjectsV2Result getObjects(String bucketName) {
-        return s3.listObjectsV2(bucketName);
+        return getS3().listObjectsV2(bucketName);
     }
 
     public ListObjectsV2Result getObjects(String bucketName, String prefix) {
